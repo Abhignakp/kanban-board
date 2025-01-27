@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kanban Board</title>
+
+    <style>
+      /* Basic Styling */
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f7f7f7;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Board Layout */
+      .board {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 20px;
+      }
+
+      .lanes {
+        display: flex;
+        justify-content: space-between;
+        width: 90%;
+        margin-top: 20px;
+      }
+
+      .swim-lane {
+        background-color: #ffffff;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        width: 30%;
+        padding: 10px;
+        margin: 0 10px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .swim-lane.drag-enter {
+        background-color: #f0f0f0;
+      }
+
+      .heading {
+        font-size: 1.2em;
+        color: #007bff;
+        text-align: center;
+      }
+
+      .task-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .task {
+        background-color: #d1e7ff;
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 5px;
+        cursor: grab;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+
+      .task.is-dragging {
+        opacity: 0.5;
+      }
+
+      /* Task Form Styling */
+      .task-form {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+
+      #todo-input {
+        padding: 10px;
+        margin-right: 10px;
+        font-size: 1em;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        width: 300px;
+      }
+
+      button {
+        padding: 10px 15px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      /* Add Swim Lane Button */
+      #add-lane {
+        padding: 10px 20px;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        margin-top: 20px;
+        cursor: pointer;
+      }
+
+      #add-lane:hover {
+        background-color: #218838;
+      }
+    </style>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const kanbanBoard = document.getElementById("kanban-board");
+
+        // Helper function to create tasks
+        const createTask = (text) => {
+          const task = document.createElement("li");
+          task.classList.add("task");
+          task.setAttribute("draggable", "true");
+          task.textContent = text;
+
+          // Add drag event listeners
+          task.addEventListener("dragstart", () => {
+            task.classList.add("is-dragging");
+          });
+
+          task.addEventListener("dragend", () => {
+            task.classList.remove("is-dragging");
+            saveState();
+          });
+
+          return task;
+        };
+
+        // Helper function to save the current state
+        const saveState = () => {
+          const lanes = document.querySelectorAll(".swim-lane");
+          const state = {};
+
+          lanes.forEach((lane) => {
+            const laneId = lane.id;
+            const tasks = Array.from(lane.querySelectorAll(".task"));
+            state[laneId] = tasks.map((task) => task.textContent);
+          });
+
+          localStorage.setItem("kanbanState", JSON.stringify(state));
+        };
+
+        // Load saved state from localStorage
+        const loadState = () => {
+          const savedState = JSON.parse(localStorage.getItem("kanbanState"));
+          if (!savedState) return;
+
+          Object.keys(savedState).forEach((laneId) => {
+            const lane = document.getElementById(laneId);
+            if (lane) {
+              const taskList = lane.querySelector(".task-list");
+              savedState[laneId].forEach((taskText) => {
+                const task = createTask(taskText);
+                taskList.appendChild(task);
+              });
+            }
+          });
+        };
+
+        // Add new lane functionality
+        const addLane = () => {
+          const newLane = document.createElement("div");
+          newLane.classList.add("swim-lane");
+          newLane.id = `lane-${Date.now()}`;
+
+          newLane.innerHTML = `
+            <h3 class="heading">New Lane</h3>
+            <ul class="task-list"></ul>
+          `;
+
+          kanbanBoard.appendChild(newLane);
+          attachDragAndDropEvents(newLane);
+          saveState();
+        };
+
+        // Attach drag-and-drop events to a lane
+        const attachDragAndDropEvents = (lane) => {
+          lane.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            const dragging = document.querySelector(".is-dragging");
+            const afterElement = getDragAfterElement(lane, e.clientY);
+            const taskList = lane.querySelector(".task-list");
+
+            if (afterElement == null) {
+              taskList.appendChild(dragging);
+            } else {
+              taskList.insertBefore(dragging, afterElement);
+            }
+          });
+
+          lane.addEventListener("drop", () => {
+            saveState();
+          });
+        };
+
+        // Helper to find the position to drop the task
+        const getDragAfterElement = (container, y) => {
+          const draggableElements = [...container.querySelectorAll(".task:not(.is-dragging)")];
+
+          return draggableElements.reduce(
+            (closest, child) => {
+              const box = child.getBoundingClientRect();
+              const offset = y - box.top - box.height / 2;
+              if (offset < 0 && offset > closest.offset) {
+                return { offset, element: child };
+              } else {
+                return closest;
+              }
+            },
+            { offset: Number.NEGATIVE_INFINITY }
+          ).element;
+        };
+
+        // Add event listener for the "Add Lane" button
+        document.getElementById("add-lane").addEventListener("click", addLane);
+
+        // Add event listener for the task form
+        document.getElementById("todo-form").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const taskInput = document.getElementById("todo-input");
+          const taskText = taskInput.value.trim();
+
+          if (taskText) {
+            const taskList = document.getElementById("todo-list");
+            const task = createTask(taskText);
+            taskList.appendChild(task);
+            taskInput.value = "";
+            saveState();
+          }
+        });
+
+        // Initialize drag-and-drop for default lanes
+        document.querySelectorAll(".swim-lane").forEach(attachDragAndDropEvents);
+
+        // Load the saved state on page load
+        loadState();
+      });
+    </script>
+  </head>
+  <body>
+    <div class="board">
+      <!-- Task Form -->
+      <form id="todo-form" class="task-form">
+        <input type="text" placeholder="Enter Task..." id="todo-input" />
+        <button type="submit">Add Task</button>
+      </form>
+
+      <!-- Kanban Board -->
+      <div id="kanban-board" class="lanes">
+        <!-- Default Swim Lane: To-Do -->
+        <div class="swim-lane" id="todo-lane">
+          <h3 class="heading">To-Do</h3>
+          <ul class="task-list" id="todo-list"></ul>
+        </div>
+
+        <!-- Default Swim Lane: Doing -->
+        <div class="swim-lane" id="doing-lane">
+          <h3 class="heading">Doing</h3>
+          <ul class="task-list" id="doing-list"></ul>
+        </div>
+
+        <!-- Default Swim Lane: Done -->
+        <div class="swim-lane" id="done-lane">
+          <h3 class="heading">Done</h3>
+          <ul class="task-list" id="done-list"></ul>
+        </div>
+      </div>
+
+      <!-- Add New Swim Lane Button -->
+      <button id="add-lane">Add New Lane</button>
+    </div>
+  </body>
+</html>
